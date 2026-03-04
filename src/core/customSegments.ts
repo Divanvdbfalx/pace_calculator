@@ -112,6 +112,8 @@ export function buildCustomSegments(
 }
 
 export function customSegmentsToCsv(segments: CustomSegmentTarget[]): string {
+  const escapeCsv = (value: string): string => `"${value.split('"').join('""')}"`;
+
   const header = [
     'segment_index',
     'start_checkpoint',
@@ -127,8 +129,8 @@ export function customSegmentsToCsv(segments: CustomSegmentTarget[]): string {
 
   const rows = segments.map((segment) => [
     segment.segmentIndex,
-    `"${segment.startCheckpoint.replaceAll('"', '""')}"`,
-    `"${segment.endCheckpoint.replaceAll('"', '""')}"`,
+    escapeCsv(segment.startCheckpoint),
+    escapeCsv(segment.endCheckpoint),
     round(segment.startKm, 3),
     round(segment.endKm, 3),
     round(segment.lengthM, 2),
