@@ -9,6 +9,7 @@ import type { RoutePoint } from '../../core/types';
 interface RouteMapProps {
   profile: RoutePoint[];
   checkpoints: Checkpoint[];
+  hoverDistanceKm: number | null;
 }
 
 type LatLng = [number, number];
@@ -42,7 +43,7 @@ function nearestPointByDistance(profile: RoutePoint[], checkpointKm: number): Ro
   return best;
 }
 
-export function RouteMap({ profile, checkpoints }: RouteMapProps) {
+export function RouteMap({ profile, checkpoints, hoverDistanceKm }: RouteMapProps) {
   if (profile.length < 2) {
     return null;
   }
@@ -67,6 +68,8 @@ export function RouteMap({ profile, checkpoints }: RouteMapProps) {
       };
     })
     .filter((cp): cp is { id: string; name: string; km: number; lat: number; lon: number } => cp !== null);
+
+  const hoverPoint = hoverDistanceKm !== null ? nearestPointByDistance(profile, hoverDistanceKm) : null;
 
   return (
     <section className="panel route-map-panel">
@@ -106,6 +109,18 @@ export function RouteMap({ profile, checkpoints }: RouteMapProps) {
               </Popup>
             </CircleMarker>
           ))}
+
+          {hoverPoint && (
+            <CircleMarker
+              center={[hoverPoint.lat, hoverPoint.lon]}
+              radius={9}
+              pathOptions={{ color: '#7c3aed', fillColor: '#8b5cf6', fillOpacity: 0.85 }}
+            >
+              <Popup>
+                Hover Position ({hoverDistanceKm?.toFixed(2)} km)
+              </Popup>
+            </CircleMarker>
+          )}
         </MapContainer>
       </div>
     </section>

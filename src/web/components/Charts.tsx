@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, ReferenceLine } from 'recharts';
 import type { TooltipProps } from 'recharts';
 import type { Checkpoint } from '../../core/customSegments';
@@ -9,6 +8,8 @@ interface ChartsProps {
   profile: RoutePoint[];
   checkpoints: Checkpoint[];
   onElevationClick: (distanceKm: number) => void;
+  hoverDistanceKm: number | null;
+  onHoverDistanceChange: (distanceKm: number | null) => void;
 }
 
 function extractNumeric(value: unknown): number | null {
@@ -120,8 +121,7 @@ function nearestSpeedDistance(distanceKm: number, speedData: Array<{ distanceKm:
   return best;
 }
 
-export function Charts({ segments, profile, checkpoints, onElevationClick }: ChartsProps) {
-  const [hoverDistanceKm, setHoverDistanceKm] = useState<number | null>(null);
+export function Charts({ segments, profile, checkpoints, onElevationClick, hoverDistanceKm, onHoverDistanceChange }: ChartsProps) {
   const speedData = segments.map((segment) => ({
     distanceKm: segment.endKm,
     speedKmh: segment.targetSpeedKmh,
@@ -149,10 +149,10 @@ export function Charts({ segments, profile, checkpoints, onElevationClick }: Cha
             onMouseMove={(state) => {
               const distance = readActiveDistanceFromChartState(state);
               if (distance !== null) {
-                setHoverDistanceKm(nearestSpeedDistance(distance, speedData));
+                onHoverDistanceChange(nearestSpeedDistance(distance, speedData));
               }
             }}
-            onMouseLeave={() => setHoverDistanceKm(null)}
+            onMouseLeave={() => onHoverDistanceChange(null)}
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="distanceKm" tickFormatter={(v) => `${Number(v).toFixed(1)} km`} minTickGap={40} />
@@ -173,10 +173,10 @@ export function Charts({ segments, profile, checkpoints, onElevationClick }: Cha
             onMouseMove={(state) => {
               const distance = readActiveDistanceFromChartState(state);
               if (distance !== null) {
-                setHoverDistanceKm(nearestSpeedDistance(distance, speedData));
+                onHoverDistanceChange(nearestSpeedDistance(distance, speedData));
               }
             }}
-            onMouseLeave={() => setHoverDistanceKm(null)}
+            onMouseLeave={() => onHoverDistanceChange(null)}
             onClick={(state) => {
               const distance = readActiveDistanceFromChartState(state);
               if (distance !== null) {

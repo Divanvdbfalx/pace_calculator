@@ -131,6 +131,7 @@ export default function App() {
   const [result, setResult] = useState<BuildPlanResult | null>(null);
   const [error, setError] = useState<string>('');
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>(initialSavedSession?.checkpoints ?? []);
+  const [hoverDistanceKm, setHoverDistanceKm] = useState<number | null>(null);
 
   const preparedCourseState = useMemo(() => {
     if (!gpxXml.trim()) {
@@ -522,8 +523,10 @@ export default function App() {
             profile={result.resampledPoints}
             checkpoints={checkpoints}
             onElevationClick={addCheckpoint}
+            hoverDistanceKm={hoverDistanceKm}
+            onHoverDistanceChange={setHoverDistanceKm}
           />
-          <RouteMap profile={result.resampledPoints} checkpoints={checkpoints} />
+          <RouteMap profile={result.resampledPoints} checkpoints={checkpoints} hoverDistanceKm={hoverDistanceKm} />
           <section className="panel checkpoint-panel">
             <h3>Checkpoints</h3>
             {checkpoints.length === 0 && <p className="hint-text">No checkpoints yet. Click on the elevation chart to add one.</p>}
