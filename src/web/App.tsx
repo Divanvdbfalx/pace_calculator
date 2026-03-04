@@ -14,10 +14,16 @@ import type { RiderLevel } from '../core/types';
 import { Charts } from './components/Charts';
 import { CustomSegmentsTable } from './components/CustomSegmentsTable';
 import { GradientPaceTable } from './components/GradientPaceTable';
+import { RouteMap } from './components/RouteMap';
 import { SegmentsTable } from './components/SegmentsTable';
 import { StatCard } from './components/StatCard';
 
 const LOCAL_STORAGE_KEY = 'pacepro.session.v1';
+const ROUTE_PRESETS = [
+  { label: 'Cape Town Cycle Tour (109km)', gpxFile: 'Cape-Town-Cycle-Tour-109km.gpx' },
+  { label: '99er Cycle Tour 2026 (95km)', gpxFile: '99er-Cycle-Tour-2026-95km.gpx' },
+  { label: 'Winelands Cycle Tour (102km)', gpxFile: 'Winelands-Cycle-Tour-102km.gpx' },
+] as const;
 
 interface SavedSession {
   version: 1;
@@ -121,6 +127,7 @@ export default function App() {
   const [uphillBias, setUphillBias] = useState<number>(initialSavedSession?.uphillBias ?? 0);
   const [splitBias, setSplitBias] = useState<number>(initialSavedSession?.splitBias ?? 0);
   const [riderLevel, setRiderLevel] = useState<RiderLevel>(initialSavedSession?.riderLevel ?? 'intermediate');
+  const [selectedRouteGpx, setSelectedRouteGpx] = useState<string>('Cape-Town-Cycle-Tour-109km.gpx');
   const [result, setResult] = useState<BuildPlanResult | null>(null);
   const [error, setError] = useState<string>('');
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>(initialSavedSession?.checkpoints ?? []);
@@ -204,6 +211,68 @@ export default function App() {
     }
   }
 
+  async function onLoadSelectedRoute(): Promise<void> {
+    const gpxUrl = `/routes/${selectedRouteGpx}`;
+    const gpxBase = selectedRouteGpx.replace(/\.gpx$/i, '');
+    const baseNoDistance = gpxBase.replace(/-\d+km$/i, '');
+    const segmentCandidates = [
+      `/routes/${gpxBase}-Segments.json`,
+      `/routes/${baseNoDistance}-Segments.json`,
+      `/routes/${gpxBase}-segments.json`,
+      `/routes/${baseNoDistance}-segments.json`,
+    ];
+
+    try {
+      const gpxResp = await fetch(gpxUrl, { cache: 'no-store' });
+      if (!gpxResp.ok) {
+        throw new Error(`Could not load route GPX ${gpxUrl} (${gpxResp.status}).`);
+      }
+
+      const gpxText = await gpxResp.text();
+      const trimmedGpx = gpxText.trim();
+      if (trimmedGpx.startsWith('<!doctype') || trimmedGpx.startsWith('<html')) {
+        throw new Error(`Found HTML instead of GPX at ${gpxUrl}. Put route GPX files in /public/routes.`);
+      }
+
+      setGpxXml(gpxText);
+
+      let loadedCheckpoints = false;
+      for (const segmentsUrl of segmentCandidates) {
+        const segResp = await fetch(segmentsUrl, { cache: 'no-store' });
+        if (!segResp.ok) {
+          continue;
+        }
+
+        const segText = await segResp.text();
+        const trimmedSeg = segText.trim();
+        if (
+          trimmedSeg.startsWith('<!doctype') ||
+          trimmedSeg.startsWith('<html') ||
+          trimmedSeg.startsWith('<?xml')
+        ) {
+          continue;
+        }
+
+        const parsed = normalizeSavedSession(JSON.parse(segText));
+        if (!parsed) {
+          continue;
+        }
+
+        setCheckpoints(parsed.checkpoints);
+        loadedCheckpoints = true;
+        break;
+      }
+
+      if (!loadedCheckpoints) {
+        setCheckpoints([]);
+      }
+      setError('');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load selected route.';
+      setError(message);
+    }
+  }
+
   function saveProgressFile(): void {
     const session: SavedSession = {
       version: 1,
@@ -216,7 +285,7 @@ export default function App() {
       checkpoints,
     };
 
-    downloadText('pacepro-progress.json', JSON.stringify(session, null, 2), 'application/json');
+    downloadText('Cape-Town-Cycle-Tour-Segments.json', JSON.stringify(session, null, 2), 'application/json');
   }
 
   function clearSavedLocalData(): void {
@@ -328,7 +397,8 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header>
+      <header className="app-hero panel">
+        <div className="hero-kicker">PacePro Studio</div>
         <h1>PacePro for Cycling (Speed-Based)</h1>
         <p>Upload GPX, set target, tune uphill effort and split behavior.</p>
       </header>
@@ -392,6 +462,17 @@ export default function App() {
           </select>
         </div>
 
+        <div className="field-row">
+          <label>Route Preset</label>
+          <select value={selectedRouteGpx} onChange={(e) => setSelectedRouteGpx(e.target.value)}>
+            {ROUTE_PRESETS.map((route) => (
+              <option key={route.gpxFile} value={route.gpxFile}>
+                {route.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <input
           ref={fileInputRef}
           type="file"
@@ -404,36 +485,18 @@ export default function App() {
         />
 
         <div className="button-row">
-          <button type="button" onClick={() => fileInputRef.current?.click()}>
+          <button className="btn-secondary" type="button" onClick={() => fileInputRef.current?.click()}>
             Open Progress
           </button>
-          <button type="button" onClick={saveProgressFile} disabled={!gpxXml.trim()}>
+          <button className="btn-secondary" type="button" onClick={onLoadSelectedRoute}>
+            Load Selected Route
+          </button>
+          <button className="btn-primary" type="button" onClick={saveProgressFile} disabled={!gpxXml.trim()}>
             Save Progress
           </button>
-          <button type="button" onClick={clearSavedLocalData}>
+          <button className="btn-danger" type="button" onClick={clearSavedLocalData}>
             Clear Remembered
           </button>
-
-          {result && (
-            <>
-              <button onClick={() => downloadText('pacepro-plan.csv', result.csv, 'text/csv')}>Download CSV</button>
-              <button onClick={() => downloadText('pacepro-plan.json', result.json, 'application/json')}>Download JSON</button>
-              <button
-                onClick={() => downloadText('pacepro-custom-segments.csv', customSegmentsToCsv(customSegments), 'text/csv')}
-                disabled={customSegments.length === 0}
-              >
-                Download Custom CSV
-              </button>
-              <button
-                onClick={() =>
-                  downloadText('pacepro-custom-segments.json', customSegmentsToJson(customSegments), 'application/json')
-                }
-                disabled={customSegments.length === 0}
-              >
-                Download Custom JSON
-              </button>
-            </>
-          )}
         </div>
 
         {initialSavedSession && <p className="hint-text">Last session restored automatically on load.</p>}
@@ -454,6 +517,13 @@ export default function App() {
             <StatCard label="Segments" value={`${result.plan.segments.length}`} />
           </section>
 
+          <Charts
+            segments={result.plan.segments}
+            profile={result.resampledPoints}
+            checkpoints={checkpoints}
+            onElevationClick={addCheckpoint}
+          />
+          <RouteMap profile={result.resampledPoints} checkpoints={checkpoints} />
           <section className="panel checkpoint-panel">
             <h3>Checkpoints</h3>
             {checkpoints.length === 0 && <p className="hint-text">No checkpoints yet. Click on the elevation chart to add one.</p>}
@@ -465,10 +535,10 @@ export default function App() {
                       {checkpoint.name} ({checkpoint.km.toFixed(2)} km)
                     </span>
                     <div className="checkpoint-actions">
-                      <button type="button" onClick={() => renameCheckpoint(checkpoint.id)}>
+                      <button className="btn-secondary btn-small" type="button" onClick={() => renameCheckpoint(checkpoint.id)}>
                         Rename
                       </button>
-                      <button type="button" onClick={() => removeCheckpoint(checkpoint.id)}>
+                      <button className="btn-danger btn-small" type="button" onClick={() => removeCheckpoint(checkpoint.id)}>
                         Remove
                       </button>
                     </div>
@@ -477,15 +547,36 @@ export default function App() {
               </div>
             )}
           </section>
-
-          <Charts
-            segments={result.plan.segments}
-            profile={result.resampledPoints}
-            checkpoints={checkpoints}
-            onElevationClick={addCheckpoint}
-          />
           <CustomSegmentsTable segments={customSegments} />
+          <section className="panel export-panel">
+            <h3>Custom Segment Exports</h3>
+            <div className="button-row">
+              <button
+                className="btn-ghost"
+                onClick={() => downloadText('pacepro-custom-segments.csv', customSegmentsToCsv(customSegments), 'text/csv')}
+                disabled={customSegments.length === 0}
+              >
+                Download Custom CSV
+              </button>
+              <button
+                className="btn-ghost"
+                onClick={() =>
+                  downloadText('pacepro-custom-segments.json', customSegmentsToJson(customSegments), 'application/json')
+                }
+                disabled={customSegments.length === 0}
+              >
+                Download Custom JSON
+              </button>
+            </div>
+          </section>
           <SegmentsTable segments={result.plan.segments} />
+          <section className="panel export-panel">
+            <h3>Plan Exports</h3>
+            <div className="button-row">
+              <button className="btn-ghost" onClick={() => downloadText('pacepro-plan.csv', result.csv, 'text/csv')}>Download Plan CSV</button>
+              <button className="btn-ghost" onClick={() => downloadText('pacepro-plan.json', result.json, 'application/json')}>Download Plan JSON</button>
+            </div>
+          </section>
           <GradientPaceTable selectedLevel={riderLevel} />
         </>
       )}
